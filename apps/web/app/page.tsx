@@ -1,5 +1,7 @@
 import type { LevelDefinition } from '@mindsports/shared';
 import { ProgressionMap } from '@/components/ProgressionMap';
+import { LogoutButton } from '@/components/LogoutButton';
+import { createClient } from '@/lib/supabase/server';
 
 const FALLBACK_LEVELS: LevelDefinition[] = [
   { ordinal: 1, name: 'Pawn Recruit', description: '' },
@@ -27,19 +29,46 @@ async function getLevels(): Promise<LevelDefinition[]> {
   }
 }
 
+async function getMe(accessToken: string | undefined) {
+  if (!accessToken) return null;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+  try {
+    const res = await fetch(`${apiUrl}/identity/me`, {
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) throw new Error('bad response');
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export default async function HomePage() {
-  const levels = await getLevels();
+  const supabase = createClient();
+  const { data } = await supabase.auth.getSession();
+  const session = data.session;
+
+  const [levels, me] = await Promise.all([getLevels(), getMe(session?.access_token)]);
+
+  const displayName = me?.profile?.display_name ?? session?.user.email ?? 'Student';
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
       <header className="mb-8 flex items-center justify-between">
         <h1 className="font-display text-2xl text-academy-gold">MindSports Academy</h1>
-        <span className="text-sm text-white/60">Chess Academy · Level 4 in progress</span>
+        <div className="flex items-center gap-4 text-sm text-white/60">
+          <span>Chess Academy · Level 4 in progress</span>
+          <LogoutButton />
+        </div>
       </header>
 
       <section className="mb-8 rounded-xl border border-white/10 bg-academy-charcoal p-6">
-        <h2 className="font-display text-lg">Welcome back</h2>
-        <p className="mt-1 text-sm text-white/60">14-day streak 🔥 · Rating 1240 (Bullet)</p>
+        <h2 className="font-display text-lg">Welcome back, {displayName}</h2>
+        <p className="mt-1 text-sm text-white/60">
+          14-day streak 🔥 · Rating 1240 (Bullet)
+          {me?.roles?.length ? ` · Role: ${me.roles.join(', ')}` : ''}
+        </p>
       </section>
 
       <section>
